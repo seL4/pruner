@@ -296,7 +296,7 @@ int main(int argc, char **argv) {
     }
     fclose(check);
 
-    /* Flags to tell Clang than input is C. */
+    /* Flags to tell Clang that input is C. */
     const char *const args[] = {
         "-x",
         "c",
