@@ -11,7 +11,7 @@
 # Prune
 
 This is a tool for removing excess functions from C code. It is possible to
-drammatically reduce the runtime of the C parser and friends (and your
+dramatically reduce the runtime of the C parser and friends (and your
 resulting find_theorems search space) by removing functions you are not
 calling before parsing.
 
@@ -29,7 +29,7 @@ Run `prune --help` for options. For anything more, read the source code.
 
 No attempt is made to automatically prune anything other than functions. Other
 entities don't cost us much in parsing. If you do want to explicitly prune
-other things you can use the `--blakclist` option.
+other things you can use the `--blacklist` option.
 
 Some tricky C is clever enough to even baffle Clang (e.g. seL4_IPCBuffer
 alignment). Report anything serious, but minor issues like this will have to be
