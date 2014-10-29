@@ -86,6 +86,18 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
             }
             break;
 
+        /* XXX: When multiple variables are declared in a single statement:
+         *  int x, y;
+         * the declaration appears once per variable. Only the final instance
+         * is terminated with a semi-colon and only it is valid.
+         */
+        case CXCursor_VarDecl:
+            if (strcmp(last, ";")) {
+                clang_disposeString(cxlast);
+                clang_disposeTokens(tu, tokens, tokens_sz);
+                return;
+            }
+
         default: /* shut -Wswitch warnings up */
             break;
     }
