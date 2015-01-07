@@ -91,6 +91,7 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
          * the declaration appears once per variable. Only the final instance
          * is terminated with a semi-colon and only it is valid.
          */
+        case CXCursor_TypedefDecl:
         case CXCursor_VarDecl:
             if (strcmp(last, ";")) {
                 clang_disposeString(cxlast);
