@@ -191,7 +191,7 @@ static options_t *parse_args(int argc, char **argv) {
 
     while (true) {
         int index = 0;
-        int c = getopt_long(argc, argv, "k:o:?", opts, &index);
+        int c = getopt_long(argc, argv, "b:k:o:?", opts, &index);
 
         if (c == -1)
             /* end of defined options */
@@ -215,8 +215,10 @@ static options_t *parse_args(int argc, char **argv) {
                        "Trims a C file by discarding unwanted functions.\n"
                        "\n"
                        " Options:\n"
-                       "  --keep symbol | -k symbol   Retain a particular function.\n"
-                       "  --output file | -o file     Write output to file, rather than stdout.\n",
+                       "  --blacklist symbol | -b symbol  Drop a given typedef or variable.\n"
+                       "  --help | -?                     Print this information.\n"
+                       "  --keep symbol | -k symbol       Retain a particular function.\n"
+                       "  --output file | -o file         Write output to file, rather than stdout.\n",
                     argv[0]);
                 goto fail4;
 
