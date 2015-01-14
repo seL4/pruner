@@ -92,6 +92,16 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
          * is terminated with a semi-colon and only it is valid.
          */
         case CXCursor_TypedefDecl:
+            /* To add insult to injury, typedefed structs with trailing
+             * __attribute__s come out with nothing following the
+             * __attribute__. Why? Who knows. In this case we actually *do*
+             * want to emit them. Probably. Of course this logic breaks down in
+             * the case of code like:
+             *  typedef struct f { int x; } y, z __attribute__(...);
+             * but I don't easily see how to resolve situations like this.
+             */
+            if (!strcmp(last, "__attribute__"))
+                break;
         case CXCursor_VarDecl:
             if (strcmp(last, ";")) {
                 clang_disposeString(cxlast);
