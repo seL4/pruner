@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+//#define DEBUG 1
+
 /* We want to implement a rewriter (or source-to-source translator). The
  * standard way of doing this would be to sub-class RecursiveASTVisitor and go
  * from there. After several attempts I gave up on getting either of the Clang
@@ -55,6 +57,16 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
     const char *last = clang_getCString(cxlast);
 
     enum CXCursorKind kind = clang_getCursorKind(cursor);
+
+#ifdef DEBUG
+    CXString cxname = clang_getCursorSpelling(cursor);
+    const char *name = clang_getCString(cxname);
+    CXString cxkind = clang_getTypeKindSpelling(kind);
+    const char *k = clang_getCString(cxkind);
+    fprintf(stderr, "Cursor %s of kind %s\n", name, k);
+    clang_disposeString(cxkind);
+    clang_disposeString(cxname);
+#endif
 
     switch (kind) {
 
