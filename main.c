@@ -104,6 +104,7 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
          * is terminated with a semi-colon and only it is valid.
          */
         case CXCursor_TypedefDecl:
+        case CXCursor_VarDecl:
             /* To add insult to injury, typedefed structs with trailing
              * __attribute__s come out with nothing following the
              * __attribute__. Why? Who knows. In this case we actually *do*
@@ -114,7 +115,6 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
              */
             if (!strcmp(last, "__attribute__"))
                 break;
-        case CXCursor_VarDecl:
             if (strcmp(last, ";")) {
                 clang_disposeString(cxlast);
                 clang_disposeTokens(tu, tokens, tokens_sz);
@@ -132,7 +132,7 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
         CXString s = clang_getTokenSpelling(tu, tokens[i]);
         const char *token = clang_getCString(s);
         if (i == tokens_sz - 1 &&
-                kind == CXCursor_TypedefDecl &&
+                (kind == CXCursor_TypedefDecl || kind == CXCursor_VarDecl) &&
                 !strcmp(token, "__attribute__"))
             /* XXX: Yet more hackery. Libclang misparses a trailing attribute
              * on a typedef. This should appear in the AST as an UnexposedDecl,
