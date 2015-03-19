@@ -48,3 +48,11 @@ const char *set_iter_next(set_iter_t *i) {
         return NULL;
     return item;
 }
+
+void set_foreach(set_t *s, void (*f)(void *value)) {
+    void f_wrapper(void *key __attribute__((unused)), void *value,
+            void *user_data __attribute__((unused))) {
+        f(value);
+    }
+    g_hash_table_foreach(s, f_wrapper, NULL);
+}

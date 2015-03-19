@@ -27,4 +27,6 @@ typedef GHashTableIter set_iter_t;
 void set_iter(set_t *s, set_iter_t *i);
 const char *set_iter_next(set_iter_t *i);
 
+void set_foreach(set_t *s, void (*f)(void *value));
+
 #endif
