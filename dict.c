@@ -14,8 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-dict_t *dict(void) {
-    return g_hash_table_new(g_str_hash, g_str_equal);
+dict_t *dict(void (*value_destroyer)(void *value)) {
+    return g_hash_table_new_full(g_str_hash, g_str_equal, NULL, value_destroyer);
 }
 
 void dict_set(dict_t *d, const char *key, void *value) {

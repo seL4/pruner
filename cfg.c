@@ -150,7 +150,7 @@ fail: free(name);
 }
 
 cfg_t *cfg(CXTranslationUnit tu) {
-    cfg_t *c = dict();
+    cfg_t *c = dict(NULL);
     if (c == NULL)
         return NULL;
     CXCursor cursor = clang_getTranslationUnitCursor(tu);
