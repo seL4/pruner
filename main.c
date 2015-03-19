@@ -36,7 +36,7 @@ static bool is_blacklisted(set_t *blacklist, CXCursor cursor) {
 }
 
 /* Dump a given cursor to the passed stream. */
-static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
+static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *attribs) {
     /* Transform the cursor into a list of text tokens. */
     CXSourceRange range = clang_getCursorExtent(cursor);
     CXToken *tokens;
@@ -131,6 +131,13 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
     for (unsigned int i = 0; i < tokens_sz; i++) {
         CXString s = clang_getTokenSpelling(tu, tokens[i]);
         const char *token = clang_getCString(s);
+        if (i == tokens_sz - 1 && attribs != NULL) {
+            /* Precede the last token with any extra attributes. */
+            void print_attribute(const char *attrib) {
+                fprintf(stream, "__attribute__((%s))\n", attrib);
+            }
+            set_foreach(attribs, (void(*)(void*))print_attribute);
+        }
         if (i == tokens_sz - 1 &&
                 (kind == CXCursor_TypedefDecl || kind == CXCursor_VarDecl) &&
                 !strcmp(token, "__attribute__"))
@@ -152,6 +159,7 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor) {
 typedef struct {
     set_t *keep;
     set_t *blacklist;
+    dict_t *extra_attributes;
     CXTranslationUnit *tu;
     FILE *out;
 } state_t;
@@ -159,23 +167,32 @@ typedef struct {
 /* Visit a node in the AST. */
 enum CXChildVisitResult visitor(CXCursor cursor, CXCursor _, state_t *state) {
 
+    CXString s = clang_getCursorSpelling(cursor);
+    const char *name = clang_getCString(s);
+
+    bool retain = true;
+
     if (clang_getCursorKind(cursor) == CXCursor_FunctionDecl) {
         /* Determine whether the function was one of those the user requested
          * to keep. */
-        CXString s = clang_getCursorSpelling(cursor);
-        const char *name = clang_getCString(s);
-        bool retain = set_contains(state->keep, name);
-        clang_disposeString(s);
-        if (!retain)
-            return CXChildVisit_Continue;
+        retain = set_contains(state->keep, name);
     }
+
+    /* Get any extra attributes we need to apply to this symbol. */
+    set_t *attribs = dict_get(state->extra_attributes, name);
+
+    /* Don't need the symbol name any more. */
+    clang_disposeString(s);
+
+    if (!retain)
+        return CXChildVisit_Continue;
 
     if (is_blacklisted(state->blacklist, cursor))
         return CXChildVisit_Continue;
 
     /* If we reached here, the current cursor is one we do want in the output.
      */
-    emit(state->out, *state->tu, cursor);
+    emit(state->out, *state->tu, cursor, attribs);
 
     /* Never recurse (in the AST). We're only visiting top-level nodes. */
     return CXChildVisit_Continue;
@@ -186,10 +203,12 @@ typedef struct {
     const char *output;
     set_t *keep;
     set_t *blacklist;
+    dict_t *extra_attributes;
 } options_t;
 
 static options_t *parse_args(int argc, char **argv) {
     const struct option opts[] = {
+        {"add-attribute", required_argument, NULL, 'a'},
         {"blacklist", required_argument, NULL, 'b'},
         {"help", no_argument, NULL, '?'},
         {"keep", required_argument, NULL, 'k'},
@@ -211,15 +230,37 @@ static options_t *parse_args(int argc, char **argv) {
     if (o->blacklist == NULL)
         goto fail3;
 
+    o->extra_attributes = dict((void(*)(void*))set_destroy);
+    if (o->extra_attributes == NULL)
+        goto fail4;
+
     while (true) {
         int index = 0;
-        int c = getopt_long(argc, argv, "b:k:o:?", opts, &index);
+        int c = getopt_long(argc, argv, "a:b:k:o:?", opts, &index);
 
         if (c == -1)
             /* end of defined options */
             break;
 
         switch (c) {
+            case 'a':; /* --add-attribute */
+                char *attrib = strstr(optarg, ":");
+                if (attrib == NULL) {
+                    fprintf(stderr, "illegal argument %s to --add-attribute\n", optarg);
+                    goto fail4;
+                }
+                *attrib = '\0';/* NUL-terminate the symbol name */
+                attrib++; /* move on to the attribute */
+                set_t *s = dict_get(o->extra_attributes, optarg);
+                if (s == NULL) {
+                    s = set();
+                    if (s == NULL)
+                        goto fail4;
+                    dict_set(o->extra_attributes, optarg, s);
+                }
+                set_insert(s, attrib);
+                break;
+
             case 'b': /* --blacklist */
                 set_insert(o->blacklist, optarg);
                 break;
@@ -237,15 +278,17 @@ static options_t *parse_args(int argc, char **argv) {
                        "Trims a C file by discarding unwanted functions.\n"
                        "\n"
                        " Options:\n"
+                       "  --add-attribute symbol:attrib\n"
+                       "  -a symbol:attrib                Annotate a symbol with a GCC attribute.\n"
                        "  --blacklist symbol | -b symbol  Drop a given typedef or variable.\n"
                        "  --help | -?                     Print this information.\n"
                        "  --keep symbol | -k symbol       Retain a particular function.\n"
                        "  --output file | -o file         Write output to file, rather than stdout.\n",
                     argv[0]);
-                goto fail4;
+                goto fail5;
 
             default:
-                goto fail4;
+                goto fail5;
         }
     }
 
@@ -254,11 +297,12 @@ static options_t *parse_args(int argc, char **argv) {
         o->input = argv[optind];
     else if (optind < argc) {
         fprintf(stderr, "multiple input files are not supported\n");
-        goto fail4;
+        goto fail5;
     }
 
     return o;
 
+fail5: dict_destroy(o->extra_attributes);
 fail4: set_destroy(o->blacklist);
 fail3: set_destroy(o->keep);
 fail2: free(o);
@@ -371,6 +415,7 @@ int main(int argc, char **argv) {
     state_t st = {
         .keep = opts->keep,
         .blacklist = opts->blacklist,
+        .extra_attributes = opts->extra_attributes,
         .tu = &tu,
         .out = f,
     };
