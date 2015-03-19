@@ -26,7 +26,7 @@
  * C++ or Python bindings to compile and link and resorted to the below in C.
  */
 
-/* Determine whether a given cursor is on our list of entities to never emit. */
+/* Determine whether a given cursor is in our list of entities to never emit. */
 static bool is_blacklisted(set_t *blacklist, CXCursor cursor) {
     CXString s = clang_getCursorSpelling(cursor);
     const char *name = clang_getCString(s);
