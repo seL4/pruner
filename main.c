@@ -348,7 +348,7 @@ static int merge_callees(set_t *keeps, cfg_t *graph) {
         if (caller == NULL)
             break;
 
-        if (cfg_visit_callees(graph, caller, visitor, NULL) != 0) {
+        if (cfg_visit_callees(graph, caller, visitor, NULL) == 1) {
             /* Traversal of this particular caller's callees failed. */
             set_destroy(callees);
             return -1;

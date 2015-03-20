@@ -105,9 +105,11 @@ int cfg_visit_callees(cfg_t *c, const char *name, cfg_visitor_t visitor,
         void *data) {
 
     fn_t *f = dict_get(c, name);
-    if (f == NULL)
+    if (f == NULL) {
         /* Function not found. */
-        return visitor(NULL, name, data);
+        visitor(NULL, name, data);
+        return -1;
+    }
 
     return visit_callees(c, f, visitor, data) == CXChildVisit_Break;
 }
