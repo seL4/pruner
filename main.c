@@ -11,6 +11,7 @@
 #include <assert.h>
 #include "cfg.h"
 #include <clang-c/Index.h> /* -lclang */
+#include <errno.h>
 #include <getopt.h>
 #include "set.h"
 #include <stdbool.h>
@@ -403,7 +404,12 @@ int main(int argc, char **argv) {
      */
     cfg_t *graph = cfg(tu);
     if (graph == NULL) {
-        perror("failed to form CFG");
+        fprintf(stderr, "failed to form CFG");
+        if (errno != 0) {
+            perror(": ");
+        } else {
+            fprintf(stderr, "\n");
+        }
         return EXIT_FAILURE;
     }
     if (merge_callees(opts->keep, graph) != 0) {
