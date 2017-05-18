@@ -57,6 +57,10 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *att
     CXString cxlast = clang_getTokenSpelling(tu, tokens[tokens_sz - 1]);
     const char *last = clang_getCString(cxlast);
 
+    /* Grab the first token. */
+    CXString cxfirst = clang_getTokenSpelling(tu, tokens[0]);
+    const char *first = clang_getCString(cxfirst);
+
     enum CXCursorKind kind = clang_getCursorKind(cursor);
 
 #ifdef DEBUG
@@ -70,6 +74,18 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *att
 #endif
 
     switch (kind) {
+
+        /* XXX: If the cursor is an empty `;`, its extent covers the
+         * (unrelated) following token as well. Libclang bug?
+         * We could potentially just return here, but for now we will emit
+         * the ';' anyway.  Decreasing the tokens_sz prevents us from also
+         * emitting the unrelated following token.
+         */
+        case CXCursor_UnexposedDecl:
+            if (!strcmp(first, ";")) {
+                tokens_sz--;
+            }
+            break;
 
         /* XXX: If the cursor is a function definition, its extent covers the
          * (unrelated) following token as well. Libclang bug? An exception is
@@ -94,6 +110,7 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *att
         case CXCursor_EnumDecl:
             if (strcmp(last, ";") && strcmp(last, "}")) {
                 clang_disposeString(cxlast);
+                clang_disposeString(cxfirst);
                 clang_disposeTokens(tu, tokens, tokens_sz);
                 return;
             }
@@ -118,6 +135,7 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *att
                 break;
             if (strcmp(last, ";")) {
                 clang_disposeString(cxlast);
+                clang_disposeString(cxfirst);
                 clang_disposeTokens(tu, tokens, tokens_sz);
                 return;
             }
@@ -127,6 +145,7 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *att
     }
 
     clang_disposeString(cxlast);
+    clang_disposeString(cxfirst);
 
     /* Dump all the tokens, not trying to preserve white space. */
     for (unsigned int i = 0; i < tokens_sz; i++) {
