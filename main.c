@@ -23,7 +23,8 @@
  */
 
 /* Determine whether a given cursor is in our list of entities to never emit. */
-static bool is_blacklisted(set_t *blacklist, CXCursor cursor) {
+static bool is_blacklisted(set_t *blacklist, CXCursor cursor)
+{
     CXString s = clang_getCursorSpelling(cursor);
     const char *name = clang_getCString(s);
     bool blacklisted = set_contains(blacklist, name);
@@ -32,7 +33,8 @@ static bool is_blacklisted(set_t *blacklist, CXCursor cursor) {
 }
 
 /* Dump a given cursor to the passed stream. */
-static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *attribs) {
+static void emit(FILE *stream, CXTranslationUnit tu, CXCursor cursor, set_t *attribs)
+{
     /* Transform the cursor into a list of text tokens. */
     CXSourceRange range = clang_getCursorExtent(cursor);
     CXToken *tokens;
@@ -70,73 +72,75 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *att
 
     switch (kind) {
 
-        /* XXX: If the cursor is an empty `;`, its extent covers the
-         * (unrelated) following token as well. Libclang bug?
-         * We could potentially just return here, but for now we will emit
-         * the ';' anyway.  Decreasing the tokens_sz prevents us from also
-         * emitting the unrelated following token.
-         */
-        case CXCursor_UnexposedDecl:
-            if (!strcmp(first, ";")) {
-                tokens_sz--;
-            }
-            break;
+    /* XXX: If the cursor is an empty `;`, its extent covers the
+     * (unrelated) following token as well. Libclang bug?
+     * We could potentially just return here, but for now we will emit
+     * the ';' anyway.  Decreasing the tokens_sz prevents us from also
+     * emitting the unrelated following token.
+     */
+    case CXCursor_UnexposedDecl:
+        if (!strcmp(first, ";")) {
+            tokens_sz--;
+        }
+        break;
 
-        /* XXX: If the cursor is a function definition, its extent covers the
-         * (unrelated) following token as well. Libclang bug? An exception is
-         * that a function appearing at the end of the translation unit will not
-         * have an extra appended token. To cope with this, assume we never want to strip
-         * closing braces.
-         */
-        case CXCursor_FunctionDecl:
-            if (clang_isCursorDefinition(cursor) && strcmp(last, "}"))
-                tokens_sz--;
-            break;
+    /* XXX: If the cursor is a function definition, its extent covers the
+     * (unrelated) following token as well. Libclang bug? An exception is
+     * that a function appearing at the end of the translation unit will not
+     * have an extra appended token. To cope with this, assume we never want to strip
+     * closing braces.
+     */
+    case CXCursor_FunctionDecl:
+        if (clang_isCursorDefinition(cursor) && strcmp(last, "}")) {
+            tokens_sz--;
+        }
+        break;
 
-        /* XXX: In code like 'typedef struct foo {...} foo_t', Clang considers
-         * foo and foo_t siblings. We end up visiting foo, then foo_t. In my
-         * mind, foo is a child of foo_t, but maybe Clang's outlook makes more
-         * sense from a scoping point of view. Either way, it helpfully covers
-         * an extra token in the foo cursor, so we can play the same trick as
-         * above to elide the (excess) struct definition.
-         */
-        case CXCursor_StructDecl:
-        case CXCursor_UnionDecl:
-        case CXCursor_EnumDecl:
-            if (strcmp(last, ";") && strcmp(last, "}")) {
-                clang_disposeString(cxlast);
-                clang_disposeString(cxfirst);
-                clang_disposeTokens(tu, tokens, tokens_sz);
-                return;
-            }
-            break;
+    /* XXX: In code like 'typedef struct foo {...} foo_t', Clang considers
+     * foo and foo_t siblings. We end up visiting foo, then foo_t. In my
+     * mind, foo is a child of foo_t, but maybe Clang's outlook makes more
+     * sense from a scoping point of view. Either way, it helpfully covers
+     * an extra token in the foo cursor, so we can play the same trick as
+     * above to elide the (excess) struct definition.
+     */
+    case CXCursor_StructDecl:
+    case CXCursor_UnionDecl:
+    case CXCursor_EnumDecl:
+        if (strcmp(last, ";") && strcmp(last, "}")) {
+            clang_disposeString(cxlast);
+            clang_disposeString(cxfirst);
+            clang_disposeTokens(tu, tokens, tokens_sz);
+            return;
+        }
+        break;
 
-        /* XXX: When multiple variables are declared in a single statement:
-         *  int x, y;
-         * the declaration appears once per variable. Only the final instance
-         * is terminated with a semi-colon and only it is valid.
+    /* XXX: When multiple variables are declared in a single statement:
+     *  int x, y;
+     * the declaration appears once per variable. Only the final instance
+     * is terminated with a semi-colon and only it is valid.
+     */
+    case CXCursor_TypedefDecl:
+    case CXCursor_VarDecl:
+        /* To add insult to injury, typedefed structs with trailing
+         * __attribute__s come out with nothing following the
+         * __attribute__. Why? Who knows. In this case we actually *do*
+         * want to emit them. Probably. Of course this logic breaks down in
+         * the case of code like:
+         *  typedef struct f { int x; } y, z __attribute__(...);
+         * but I don't easily see how to resolve situations like this.
          */
-        case CXCursor_TypedefDecl:
-        case CXCursor_VarDecl:
-            /* To add insult to injury, typedefed structs with trailing
-             * __attribute__s come out with nothing following the
-             * __attribute__. Why? Who knows. In this case we actually *do*
-             * want to emit them. Probably. Of course this logic breaks down in
-             * the case of code like:
-             *  typedef struct f { int x; } y, z __attribute__(...);
-             * but I don't easily see how to resolve situations like this.
-             */
-            if (!strcmp(last, "__attribute__"))
-                break;
-            if (strcmp(last, ";")) {
-                clang_disposeString(cxlast);
-                clang_disposeString(cxfirst);
-                clang_disposeTokens(tu, tokens, tokens_sz);
-                return;
-            }
-
-        default: /* shut -Wswitch warnings up */
+        if (!strcmp(last, "__attribute__")) {
             break;
+        }
+        if (strcmp(last, ";")) {
+            clang_disposeString(cxlast);
+            clang_disposeString(cxfirst);
+            clang_disposeTokens(tu, tokens, tokens_sz);
+            return;
+        }
+
+    default: /* shut -Wswitch warnings up */
+        break;
     }
 
     clang_disposeString(cxlast);
@@ -151,20 +155,22 @@ static void emit(FILE* stream, CXTranslationUnit tu, CXCursor cursor, set_t *att
             void print_attribute(const char *attrib) {
                 fprintf(stream, "__attribute__((%s))\n", attrib);
             }
-            set_foreach(attribs, (void(*)(void*))print_attribute);
+            set_foreach(attribs, (void(*)(void *))print_attribute);
         }
         if (i == tokens_sz - 1 &&
-                (kind == CXCursor_TypedefDecl || kind == CXCursor_VarDecl) &&
-                !strcmp(token, "__attribute__"))
+            (kind == CXCursor_TypedefDecl || kind == CXCursor_VarDecl) &&
+            !strcmp(token, "__attribute__"))
             /* XXX: Yet more hackery. Libclang misparses a trailing attribute
              * on a typedef. This should appear in the AST as an UnexposedDecl,
              * but for whatever reason it doesn't. No idea from whence this
              * behaviour stems as Clang itself just removes the attribute from
              * the AST altogether entirely.
              */
+        {
             fprintf(stream, "; ");
-        else
+        } else {
             fprintf(stream, "%s\n", token);
+        }
         clang_disposeString(s);
     }
     clang_disposeTokens(tu, tokens, tokens_sz);
@@ -180,7 +186,8 @@ typedef struct {
 } state_t;
 
 /* Visit a node in the AST. */
-enum CXChildVisitResult visitor(CXCursor cursor, CXCursor _, state_t *state) {
+enum CXChildVisitResult visitor(CXCursor cursor, CXCursor _, state_t *state)
+{
 
     CXString s = clang_getCursorSpelling(cursor);
     const char *name = clang_getCString(s);
@@ -199,11 +206,13 @@ enum CXChildVisitResult visitor(CXCursor cursor, CXCursor _, state_t *state) {
     /* Don't need the symbol name any more. */
     clang_disposeString(s);
 
-    if (!retain)
+    if (!retain) {
         return CXChildVisit_Continue;
+    }
 
-    if (is_blacklisted(state->blacklist, cursor))
+    if (is_blacklisted(state->blacklist, cursor)) {
         return CXChildVisit_Continue;
+    }
 
     /* If we reached here, the current cursor is one we do want in the output.
      */
@@ -221,7 +230,8 @@ typedef struct {
     dict_t *extra_attributes;
 } options_t;
 
-static options_t *parse_args(int argc, char **argv) {
+static options_t *parse_args(int argc, char **argv)
+{
     const struct option opts[] = {
         {"add-attribute", required_argument, NULL, 'a'},
         {"blacklist", required_argument, NULL, 'b'},
@@ -232,22 +242,26 @@ static options_t *parse_args(int argc, char **argv) {
     };
 
     options_t *o = calloc(1, sizeof(*o));
-    if (o == NULL)
+    if (o == NULL) {
         goto fail1;
+    }
 
     /* defaults */
     o->output = "/dev/stdout";
     o->keep = set();
-    if (o->keep == NULL)
+    if (o->keep == NULL) {
         goto fail2;
+    }
 
     o->blacklist = set();
-    if (o->blacklist == NULL)
+    if (o->blacklist == NULL) {
         goto fail3;
+    }
 
-    o->extra_attributes = dict((void(*)(void*))set_destroy);
-    if (o->extra_attributes == NULL)
+    o->extra_attributes = dict((void(*)(void *))set_destroy);
+    if (o->extra_attributes == NULL) {
         goto fail4;
+    }
 
     while (true) {
         int index = 0;
@@ -255,91 +269,101 @@ static options_t *parse_args(int argc, char **argv) {
 
         if (c == -1)
             /* end of defined options */
+        {
             break;
+        }
 
         switch (c) {
-            case 'a':; /* --add-attribute */
-                char *attrib = strstr(optarg, ":");
-                if (attrib == NULL) {
-                    fprintf(stderr, "illegal argument %s to --add-attribute\n", optarg);
+        case 'a':; /* --add-attribute */
+            char *attrib = strstr(optarg, ":");
+            if (attrib == NULL) {
+                fprintf(stderr, "illegal argument %s to --add-attribute\n", optarg);
+                goto fail4;
+            }
+            *attrib = '\0';/* NUL-terminate the symbol name */
+            attrib++; /* move on to the attribute */
+            set_t *s = dict_get(o->extra_attributes, optarg);
+            if (s == NULL) {
+                s = set();
+                if (s == NULL) {
                     goto fail4;
                 }
-                *attrib = '\0';/* NUL-terminate the symbol name */
-                attrib++; /* move on to the attribute */
-                set_t *s = dict_get(o->extra_attributes, optarg);
-                if (s == NULL) {
-                    s = set();
-                    if (s == NULL)
-                        goto fail4;
-                    dict_set(o->extra_attributes, optarg, s);
-                }
-                set_insert(s, attrib);
-                break;
+                dict_set(o->extra_attributes, optarg, s);
+            }
+            set_insert(s, attrib);
+            break;
 
-            case 'b': /* --blacklist */
-                set_insert(o->blacklist, optarg);
-                break;
+        case 'b': /* --blacklist */
+            set_insert(o->blacklist, optarg);
+            break;
 
-            case 'k': /* --keep */
-                set_insert(o->keep, optarg);
-                break;
+        case 'k': /* --keep */
+            set_insert(o->keep, optarg);
+            break;
 
-            case 'o': /* --output */
-                o->output = optarg;
-                break;
+        case 'o': /* --output */
+            o->output = optarg;
+            break;
 
-            case '?': /* --help */
-                printf("Usage: %s options... input_file\n"
-                       "Trims a C file by discarding unwanted functions.\n"
-                       "\n"
-                       " Options:\n"
-                       "  --add-attribute symbol:attrib\n"
-                       "  -a symbol:attrib                Annotate a symbol with a GCC attribute.\n"
-                       "  --blacklist symbol | -b symbol  Drop a given typedef or variable.\n"
-                       "  --help | -?                     Print this information.\n"
-                       "  --keep symbol | -k symbol       Retain a particular function.\n"
-                       "  --output file | -o file         Write output to file, rather than stdout.\n",
-                    argv[0]);
-                goto fail5;
+        case '?': /* --help */
+            printf("Usage: %s options... input_file\n"
+                   "Trims a C file by discarding unwanted functions.\n"
+                   "\n"
+                   " Options:\n"
+                   "  --add-attribute symbol:attrib\n"
+                   "  -a symbol:attrib                Annotate a symbol with a GCC attribute.\n"
+                   "  --blacklist symbol | -b symbol  Drop a given typedef or variable.\n"
+                   "  --help | -?                     Print this information.\n"
+                   "  --keep symbol | -k symbol       Retain a particular function.\n"
+                   "  --output file | -o file         Write output to file, rather than stdout.\n",
+                   argv[0]);
+            goto fail5;
 
-            default:
-                goto fail5;
+        default:
+            goto fail5;
         }
     }
 
     /* Hopefully we still have an input file remaining. */
-    if (optind == argc - 1)
+    if (optind == argc - 1) {
         o->input = argv[optind];
-    else if (optind < argc) {
+    } else if (optind < argc) {
         fprintf(stderr, "multiple input files are not supported\n");
         goto fail5;
     }
 
     return o;
 
-fail5: dict_destroy(o->extra_attributes);
-fail4: set_destroy(o->blacklist);
-fail3: set_destroy(o->keep);
-fail2: free(o);
-fail1: exit(EXIT_FAILURE);
+fail5:
+    dict_destroy(o->extra_attributes);
+fail4:
+    set_destroy(o->blacklist);
+fail3:
+    set_destroy(o->keep);
+fail2:
+    free(o);
+fail1:
+    exit(EXIT_FAILURE);
 }
 
 /* Use the passed CFG to recursively enumerate callees of the passed "to-keep"
  * symbols and accumulate these. Returns non-zero on failure.
  */
-static int merge_callees(set_t *keeps, cfg_t *graph) {
+static int merge_callees(set_t *keeps, cfg_t *graph)
+{
 
     /* A set for tracking the callees. We need to use a separate set and then
      * post-merge this into the keeps set because we cannot insert into the
      * keeps set while iterating through it.
      */
     set_t *callees = set();
-    if (callees == NULL)
+    if (callees == NULL) {
         return -1;
+    }
 
     /* Visitor for appending each callee to the "keeps" set. */
     enum CXChildVisitResult visitor(const char *callee, const char *caller,
-            void *_) {
+                                    void *_) {
 
         /* The CFG callee visitation calls us once per undefined function with
          * NULL as the callee. This is useful for warning the user when the
@@ -360,8 +384,9 @@ static int merge_callees(set_t *keeps, cfg_t *graph) {
 
     while (true) {
         const char *caller = set_iter_next(&i);
-        if (caller == NULL)
+        if (caller == NULL) {
             break;
+        }
 
         if (cfg_visit_callees(graph, caller, visitor, NULL) == 1) {
             /* Traversal of this particular caller's callees failed. */
@@ -373,7 +398,8 @@ static int merge_callees(set_t *keeps, cfg_t *graph) {
     return 0;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     options_t *opts = parse_args(argc, argv);
 
     if (opts == NULL) {
@@ -401,7 +427,7 @@ int main(int argc, char **argv) {
     /* Parse the source file into a translation unit */
     CXIndex index = clang_createIndex(0, 0);
     CXTranslationUnit tu = clang_parseTranslationUnit(index, opts->input, args,
-        sizeof(args) / sizeof(args[0]), NULL, 0, CXTranslationUnit_None);
+                                                      sizeof(args) / sizeof(args[0]), NULL, 0, CXTranslationUnit_None);
     if (tu == NULL) {
         fprintf(stderr, "failed to parse source file\n");
         return EXIT_FAILURE;

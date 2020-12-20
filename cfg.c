@@ -16,17 +16,20 @@
 /* Visitor function for scanning a function for its callees. The set parameter
  * tracks the callee names of the function we're scanning.
  */
-static enum CXChildVisitResult scan_fn(CXCursor cursor, CXCursor _, set_t *s) {
+static enum CXChildVisitResult scan_fn(CXCursor cursor, CXCursor _, set_t *s)
+{
     /* Skip anything that's not a function call. */
-    if (clang_getCursorKind(cursor) != CXCursor_CallExpr)
+    if (clang_getCursorKind(cursor) != CXCursor_CallExpr) {
         return CXChildVisit_Recurse;
+    }
 
     /* Get the name of the callee. */
     CXString sym = clang_getCursorSpelling(cursor);
     char *name = strdup(clang_getCString(sym));
     clang_disposeString(sym);
-    if (name == NULL)
+    if (name == NULL) {
         return CXChildVisit_Break;
+    }
 
     set_insert(s, name);
 
@@ -43,15 +46,18 @@ typedef struct {
  * user's provided visitor.
  */
 static enum CXChildVisitResult visit_callees(cfg_t *c, fn_t *f,
-        cfg_visitor_t visitor, void *data) {
+                                             cfg_visitor_t visitor, void *data)
+{
 
     if (!f->callees) {
         /* We haven't yet looked inside this function. */
         f->callees = set();
-        if (f->callees == NULL)
+        if (f->callees == NULL) {
             return CXChildVisit_Break;
-        if (clang_visitChildren(f->cursor, (CXCursorVisitor)scan_fn, f->callees) != 0)
+        }
+        if (clang_visitChildren(f->cursor, (CXCursorVisitor)scan_fn, f->callees) != 0) {
             return CXChildVisit_Break;
+        }
     }
 
     CXString s = clang_getCursorSpelling(f->cursor);
@@ -64,40 +70,48 @@ static enum CXChildVisitResult visit_callees(cfg_t *c, fn_t *f,
         const char *current = set_iter_next(&i);
         if (current == NULL)
             /* Iterator exhausted. */
+        {
             break;
+        }
 
         switch (visitor(current, name, data)) {
 
-            case CXChildVisit_Break:
-                goto fail;
+        case CXChildVisit_Break:
+            goto fail;
 
-            case CXChildVisit_Recurse:;
-                fn_t *callee = dict_get(c, current);
+        case CXChildVisit_Recurse:
+            ;
+            fn_t *callee = dict_get(c, current);
 
-                if (callee == NULL) {
-                    /* This function has no known definition. */
-                    if (visitor(NULL, current, data) == CXChildVisit_Break)
-                        goto fail;
-                    break;
-                }
-
-                if (visit_callees(c, callee, visitor, data) == CXChildVisit_Break)
-                    /* Abort traversal. */
+            if (callee == NULL) {
+                /* This function has no known definition. */
+                if (visitor(NULL, current, data) == CXChildVisit_Break) {
                     goto fail;
+                }
+                break;
+            }
 
-                /* fall through */
+            if (visit_callees(c, callee, visitor, data) == CXChildVisit_Break)
+                /* Abort traversal. */
+            {
+                goto fail;
+            }
+
+            /* fall through */
         }
     }
 
     clang_disposeString(s);
     return CXChildVisit_Continue;
 
-fail: clang_disposeString(s);
+fail:
+    clang_disposeString(s);
     return CXChildVisit_Break;
 }
 
 int cfg_visit_callees(cfg_t *c, const char *name, cfg_visitor_t visitor,
-        void *data) {
+                      void *data)
+{
 
     fn_t *f = dict_get(c, name);
     if (f == NULL) {
@@ -109,15 +123,18 @@ int cfg_visit_callees(cfg_t *c, const char *name, cfg_visitor_t visitor,
     return visit_callees(c, f, visitor, data) == CXChildVisit_Break;
 }
 
-static enum CXChildVisitResult visit_tu(CXCursor cursor, CXCursor _, cfg_t *c) {
+static enum CXChildVisitResult visit_tu(CXCursor cursor, CXCursor _, cfg_t *c)
+{
 
     /* Skip anything that's not a function. */
-    if (clang_getCursorKind(cursor) != CXCursor_FunctionDecl)
+    if (clang_getCursorKind(cursor) != CXCursor_FunctionDecl) {
         return CXChildVisit_Continue;
+    }
 
     /* Skip function declarations that are not definitions. */
-    if (!clang_isCursorDefinition(cursor))
+    if (!clang_isCursorDefinition(cursor)) {
         return CXChildVisit_Continue;
+    }
 
     /* Determine the name of the current function. */
     CXString s = clang_getCursorSpelling(cursor);
@@ -133,8 +150,9 @@ static enum CXChildVisitResult visit_tu(CXCursor cursor, CXCursor _, cfg_t *c) {
 
     /* Construct a lazy (uninitialised) representation of its callees. */
     fn_t *f = calloc(1, sizeof(*f));
-    if (f == NULL)
+    if (f == NULL) {
         goto fail;
+    }
     f->cursor = cursor;
 
     /* Add this function to the CFG. */
@@ -142,14 +160,17 @@ static enum CXChildVisitResult visit_tu(CXCursor cursor, CXCursor _, cfg_t *c) {
 
     return CXChildVisit_Continue;
 
-fail: free(name);
+fail:
+    free(name);
     return CXChildVisit_Break;
 }
 
-cfg_t *cfg(CXTranslationUnit tu) {
+cfg_t *cfg(CXTranslationUnit tu)
+{
     cfg_t *c = dict(NULL);
-    if (c == NULL)
+    if (c == NULL) {
         return NULL;
+    }
     CXCursor cursor = clang_getTranslationUnitCursor(tu);
     if (clang_visitChildren(cursor, (CXCursorVisitor)visit_tu, c) != 0) {
         dict_destroy(c);
@@ -158,6 +179,7 @@ cfg_t *cfg(CXTranslationUnit tu) {
     return c;
 }
 
-void cfg_destroy(cfg_t *c) {
+void cfg_destroy(cfg_t *c)
+{
     dict_destroy(c);
 }

@@ -3,8 +3,7 @@
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
-#ifndef _CFG_H_
-#define _CFG_H_
+#pragma once
 
 /* Functionality related to creating and traversing a Control Flow Graph of a C
  * translation unit.
@@ -26,8 +25,8 @@ cfg_t *cfg(CXTranslationUnit tu);
 void cfg_destroy(cfg_t *c);
 
 /* Visitor used when visiting CFG nodes below. */
-typedef enum CXChildVisitResult (*cfg_visitor_t)(const char *callee,
-    const char *caller, void *data);
+typedef enum CXChildVisitResult(*cfg_visitor_t)(const char *callee,
+                                                const char *caller, void *data);
 
 /* Recursively visit all callees of a given function. user-provided visitor
  * function is invoked once per callee, with the caller function as the second
@@ -38,6 +37,4 @@ typedef enum CXChildVisitResult (*cfg_visitor_t)(const char *callee,
  * Returns non-zero on failure.
  */
 int cfg_visit_callees(cfg_t *c, const char *name, cfg_visitor_t visitor,
-    void *data);
-
-#endif
+                      void *data);

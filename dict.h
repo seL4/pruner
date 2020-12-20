@@ -3,8 +3,7 @@
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
-#ifndef _DICT_H_
-#define _DICT_H_
+#pragma once
 
 /* Implementation of a dictionary. */
 
@@ -18,5 +17,3 @@ void dict_set(dict_t *d, const char *key, void *value);
 void *dict_get(dict_t *d, const char *key);
 bool dict_contains(dict_t *d, const char *key);
 void dict_destroy(dict_t *d);
-
-#endif
